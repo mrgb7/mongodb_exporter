@@ -59,15 +59,21 @@ func listCollections(ctx context.Context, client *mongo.Client, database string,
 		}
 	}
 
-	if skipViews {
-		filter = append(filter, primitive.E{Key: "type", Value: bson.D{
-			{Key: "$in", Value: bson.A{"collection", "timeseries"}},
-		}})
-	}
-
-	collections, err := client.Database(database).ListCollectionNames(ctx, filter, opts)
+	specs, err := client.Database(database).ListCollectionSpecifications(ctx, filter, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot get the list of collections for discovery")
+	}
+
+	collections := make([]string, 0, len(specs))
+
+	for _, spec := range specs {
+		// Views are filtered here instead of in the listCollections filter because
+		// aws docdb does not support the `type` key in that filter.
+
+		if skipViews && spec.Type == "view" {
+			continue
+		}
+		collections = append(collections, spec.Name)
 	}
 
 	return collections, nil
